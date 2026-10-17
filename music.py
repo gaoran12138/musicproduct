@@ -1040,20 +1040,39 @@ def cmd_batch(args):
     files = list(_iter_audio(args.inputs))
     if not files:
         die("没找到音频文件")
-    hr(f"批量流水线 · {len(files)} 个文件")
+    parts = args.parts
+    out_root = Path(args.out) if args.out else DIR_STEMS / f"批量_{parts}"
+    if not out_root.is_absolute():
+        out_root = ROOT / out_root
+    out_root.mkdir(parents=True, exist_ok=True)
+    env = build_env()
+    hr(f"批量流水线 · {len(files)} 个文件 -> {out_root.name}")
     me = [str(PY_MAIN), str(Path(__file__).resolve())]
+
+    # 关键：一次调用 spleeter，模型只加载一次（逐文件重跑要每次重载 10s+）
+    sp = [str(PY_MAIN), "-m", "spleeter", "separate"] + [str(f) for f in files] \
+         + ["-o", str(out_root), "-p", f"spleeter:{parts}",
+            "-f", "{filename}/{instrument}.{codec}", "-c", "wav"]
+    if args.duration:
+        sp += ["-d", str(args.duration)]
+    note(f"加载模型一次，串行分离 {len(files)} 个文件…")
+    run(sp, env=env, quiet=True)
+
     done, failed = [], []
     for i, f in enumerate(files, 1):
-        note(f"[{i}/{len(files)}] {f.name}")
-        out = Path(args.out) / f.stem if args.out else DIR_STEMS / f"{f.stem}_{args.parts}"
-        cmd = me + ["separate", str(f), "--parts", args.parts, "-o", str(out)]
-        if args.duration:
-            cmd += ["-d", str(args.duration)]
-        rc, _ = run(cmd, quiet=True)
-        if rc != 0:
-            failed.append(f.name)
-            warn(f"分离失败：{f.name}")
-            continue
+        d = out_root / f.stem
+        stems = sorted(p.name for p in d.glob("*.wav")) if d.exists() else []
+        if not stems:
+            # 单文件失败不影响其他：单独重跑一次
+            warn(f"[{i}/{len(files)}] {f.name} 无输出，单独重试")
+            rc, _ = run(me + ["separate", str(f), "--parts", parts,
+                              "-o", str(out_root), "--nested"]
+                        + (["-d", str(args.duration)] if args.duration else []), quiet=True)
+            d = out_root / f.stem
+            if rc != 0 or not d.exists():
+                failed.append(f.name)
+                continue
+        print(f"  [{i}/{len(files)}] {f.name} -> {len(list(d.resolve().glob('*.wav')))} 轨")
         if args.lyrics:
             run(me + ["lyrics", str(f)], quiet=True)
         if args.chords:
