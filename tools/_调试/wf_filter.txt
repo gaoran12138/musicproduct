@@ -1,0 +1,1 @@
+[0:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,boxblur=25:5[bgb];[0:v]scale=700:700[fg];[bgb][fg]overlay=(W-w)/2:(H-h)/2,subtitles='D\:/musicProduct/Radiohead_WeirdFishes_歌词.ass'[v]

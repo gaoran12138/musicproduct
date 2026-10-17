@@ -1,0 +1,49 @@
+# ===== 大文件 / 可重建产物（不入库）=====
+/分轨/
+/成品/
+/素材/B站下载/
+/素材/转换中间/
+/pretrained_models/
+/test/
+/tools/python310/
+/tools/ffmpeg/
+/tools/cuda/
+/.venv-as/
+/发布包/
+/档案/报告/
+
+# 音频/视频/权重/安装包
+*.wav
+*.flac
+*.mp3
+*.m4a
+*.mp4
+*.mkv
+*.webm
+*.whl
+*.ckpt
+*.th
+*.onnx
+*.tar.gz
+*.zip
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+Thumbs.db
+desktop.ini
+
+# ===== 保留（体积小、有价值）=====
+!*.md
+!*.srt
+!*.lrc
+!*.ass
+!*.json
+!/素材/图片/*.webp
+!/素材/图片/*.jpg
+!/素材/图片/*.png

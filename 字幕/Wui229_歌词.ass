@@ -1,0 +1,41 @@
+﻿[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+WrapStyle: 0
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Microsoft YaHei,38,&H002A2320,&H000000FF,&H00D5E8F2,&H64000000,0,0,0,0,100,100,1,0,1,3,1.5,2,60,60,90,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:25.30,0:00:26.47,Default,,0,0,0,,每一天
+Dialogue: 0,0:00:26.47,0:00:32.58,Default,,0,0,0,,我和自己見面 好像沒有期限
+Dialogue: 0,0:00:32.58,0:00:37.92,Default,,0,0,0,,心裡住了間諜
+Dialogue: 0,0:00:37.92,0:00:39.68,Default,,0,0,0,,動搖了的我
+Dialogue: 0,0:00:39.68,0:00:43.61,Default,,0,0,0,,做最簡單的事都像在復健
+Dialogue: 0,0:00:43.61,0:00:49.86,Default,,0,0,0,,再重演 在毀滅
+Dialogue: 0,0:00:49.86,0:00:56.15,Default,,0,0,0,,一個人關在房間裡面
+Dialogue: 0,0:00:56.15,0:01:02.26,Default,,0,0,0,,好像我又被困住了
+Dialogue: 0,0:01:02.26,0:01:08.88,Default,,0,0,0,,隨便寫了幾個字 想要給自己安慰
+Dialogue: 0,0:01:08.88,0:01:14.27,Default,,0,0,0,,卻怎麼樣都沒改變
+Dialogue: 0,0:01:14.27,0:01:17.44,Default,,0,0,0,,人群的溫暖輕撫我讓寂寞更熱烈
+Dialogue: 0,0:01:17.44,0:01:22.07,Default,,0,0,0,,無知的黑洞撐開虛空快把我撕裂
+Dialogue: 0,0:01:22.07,0:01:26.97,Default,,0,0,0,,我站在正中間
+Dialogue: 0,0:01:26.97,0:01:29.98,Default,,0,0,0,,我想相信感動是真的
+Dialogue: 0,0:01:29.98,0:01:33.03,Default,,0,0,0,,我想相信一切會發生
+Dialogue: 0,0:01:33.03,0:01:39.13,Default,,0,0,0,,我想相信永恆不遠了
+Dialogue: 0,0:01:39.13,0:01:42.38,Default,,0,0,0,,Every time I close my eyes
+Dialogue: 0,0:01:42.38,0:01:45.36,Default,,0,0,0,,Every time I lost my mind
+Dialogue: 0,0:01:45.36,0:01:47.32,Default,,0,0,0,,Every time 我告訴我自己
+Dialogue: 0,0:01:47.32,0:01:51.37,Default,,0,0,0,,I will be ok
+Dialogue: 0,0:01:51.37,0:01:54.42,Default,,0,0,0,,請讓海浪校正我的聽覺
+Dialogue: 0,0:01:54.42,0:01:57.46,Default,,0,0,0,,請讓眼淚洗淨我的雙眼
+Dialogue: 0,0:01:57.46,0:02:03.60,Default,,0,0,0,,請讓感覺再次回到我身邊
+Dialogue: 0,0:02:03.60,0:02:06.88,Default,,0,0,0,,人群的溫暖輕撫我讓寂寞更熱烈
+Dialogue: 0,0:02:06.88,0:02:11.34,Default,,0,0,0,,無知的黑洞撐開虛空快把我撕裂
+Dialogue: 0,0:02:11.34,0:02:16.37,Default,,0,0,0,,我站在正中間
+Dialogue: 0,0:02:16.37,0:02:19.37,Default,,0,0,0,,我想相信感動是真的
+Dialogue: 0,0:02:19.37,0:02:22.32,Default,,0,0,0,,我想相信一切會發生
+Dialogue: 0,0:02:22.32,0:02:26.32,Default,,0,0,0,,我想相信永恆不遠了
