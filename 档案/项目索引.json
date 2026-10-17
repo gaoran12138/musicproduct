@@ -1,0 +1,191 @@
+{
+  "updated": "2026-10-18 04:08:54",
+  "projects": [
+    {
+      "project": "WeirdFishes_伴奏",
+      "source": null,
+      "source_duration": null,
+      "total_bytes": 112256412,
+      "lyrics": [
+        "Radiohead_WeirdFishes_歌词.ass",
+        "Radiohead_WeirdFishes_歌词.lrc",
+        "Radiohead_WeirdFishes_歌词.srt"
+      ],
+      "videos": [
+        "WeirdFishes_伴奏_歌词视频.mp4"
+      ],
+      "updated": "2026-10-18 04:08:52",
+      "stems": 2
+    },
+    {
+      "project": "Wui229_伴奏",
+      "source": "素材\\Wui229-陳嫺靜.mp3",
+      "source_duration": 179.98,
+      "total_bytes": 63488652,
+      "lyrics": [
+        "Wui229_歌词.ass",
+        "Wui229_歌词.lrc",
+        "Wui229_歌词.srt"
+      ],
+      "videos": [
+        "Wui229_伴奏_拼色视频.mp4",
+        "Wui229_伴奏_歌词视频.mp4"
+      ],
+      "updated": "2026-10-18 04:08:52",
+      "stems": 2
+    },
+    {
+      "project": "Wui229_分轨",
+      "source": "素材\\Wui229-陳嫺靜.mp3",
+      "source_duration": 179.98,
+      "total_bytes": 190465956,
+      "lyrics": [
+        "Wui229_歌词.ass",
+        "Wui229_歌词.lrc",
+        "Wui229_歌词.srt"
+      ],
+      "videos": [
+        "Wui229_伴奏_拼色视频.mp4",
+        "Wui229_伴奏_歌词视频.mp4"
+      ],
+      "updated": "2026-10-18 04:08:52",
+      "stems": 6
+    },
+    {
+      "project": "分裂翻唱_分轨",
+      "source": "素材\\分裂翻唱录音.m4a",
+      "source_duration": 242.49,
+      "total_bytes": 85552748,
+      "lyrics": [],
+      "videos": [],
+      "updated": "2026-10-18 04:08:53",
+      "stems": 2
+    },
+    {
+      "project": "原曲大人中_分轨",
+      "source": null,
+      "source_duration": null,
+      "total_bytes": 97331564,
+      "lyrics": [],
+      "videos": [],
+      "updated": "2026-10-18 04:08:53",
+      "stems": 2
+    },
+    {
+      "project": "吉他手_伴奏",
+      "source": "素材\\陈绮贞 - 吉他手.flac",
+      "source_duration": 182.46,
+      "total_bytes": 64372036,
+      "lyrics": [
+        "陈绮贞 - 吉他手_歌词.lrc",
+        "陈绮贞 - 吉他手_歌词.srt",
+        "陈绮贞_吉他手_歌词.ass",
+        "陈绮贞_吉他手_歌词.lrc",
+        "陈绮贞_吉他手_歌词.srt"
+      ],
+      "videos": [
+        "吉他手.mp4"
+      ],
+      "updated": "2026-10-18 04:08:53",
+      "stems": 2
+    },
+    {
+      "project": "周菲戈KissGoodbye_分轨",
+      "source": null,
+      "source_duration": null,
+      "total_bytes": 79577244,
+      "lyrics": [],
+      "videos": [],
+      "updated": "2026-10-18 04:08:53",
+      "stems": 2
+    },
+    {
+      "project": "录音31_分轨",
+      "source": "素材\\转换中间\\录音31.wav",
+      "source_duration": 63.49,
+      "total_bytes": 22398724,
+      "lyrics": [],
+      "videos": [],
+      "updated": "2026-10-18 04:08:53",
+      "stems": 2
+    },
+    {
+      "project": "录音32_分轨",
+      "source": "素材\\转换中间\\录音32.wav",
+      "source_duration": 39.23,
+      "total_bytes": 13841212,
+      "lyrics": [],
+      "videos": [],
+      "updated": "2026-10-18 04:08:53",
+      "stems": 2
+    },
+    {
+      "project": "录音33_分轨",
+      "source": "素材\\转换中间\\录音33.wav",
+      "source_duration": 265.13,
+      "total_bytes": 93538260,
+      "lyrics": [],
+      "videos": [],
+      "updated": "2026-10-18 04:08:53",
+      "stems": 2
+    },
+    {
+      "project": "晴天_分轨",
+      "source": "素材\\周杰倫,周杰伦 - 晴天.flac",
+      "source_duration": 269.75,
+      "total_bytes": 333083730,
+      "lyrics": [
+        "晴天_右手标识.srt",
+        "晴天_和弦.srt",
+        "晴天_和弦_GP4谱版.srt",
+        "晴天_和弦_标准版.srt",
+        "晴天_和弦谱.txt",
+        "晴天_歌词+和弦+右手.srt",
+        "晴天_歌词+和弦.srt",
+        "晴天_歌词+和弦_GP4谱版.srt",
+        "晴天_歌词+和弦_标准版.srt",
+        "晴天_歌词.lrc",
+        "晴天_歌词.srt",
+        "晴天子幕A_歌词.srt",
+        "晴天子幕B_和弦右手.srt"
+      ],
+      "videos": [],
+      "updated": "2026-10-18 04:08:54",
+      "stems": 7
+    },
+    {
+      "project": "晴天_分轨v2",
+      "source": "素材\\周杰倫,周杰伦 - 晴天.flac",
+      "source_duration": 269.75,
+      "total_bytes": 523417256,
+      "lyrics": [
+        "晴天_右手标识.srt",
+        "晴天_和弦.srt",
+        "晴天_和弦_GP4谱版.srt",
+        "晴天_和弦_标准版.srt",
+        "晴天_和弦谱.txt",
+        "晴天_歌词+和弦+右手.srt",
+        "晴天_歌词+和弦.srt",
+        "晴天_歌词+和弦_GP4谱版.srt",
+        "晴天_歌词+和弦_标准版.srt",
+        "晴天_歌词.lrc",
+        "晴天_歌词.srt",
+        "晴天子幕A_歌词.srt",
+        "晴天子幕B_和弦右手.srt"
+      ],
+      "videos": [],
+      "updated": "2026-10-18 04:08:54",
+      "stems": 11
+    },
+    {
+      "project": "炫神_分轨",
+      "source": null,
+      "source_duration": null,
+      "total_bytes": 84656284,
+      "lyrics": [],
+      "videos": [],
+      "updated": "2026-10-18 04:08:54",
+      "stems": 2
+    }
+  ]
+}

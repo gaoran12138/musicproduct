@@ -460,8 +460,41 @@ def lrc_to_srt(lrc):
     return out
 
 
+# ---------------------------------------------------------------- ASR 兼底
+def _has_asr():
+    script = SCRIPT_SUB / "asr_lrc.py"
+    if not script.exists() or not PY_AS.exists():
+        return False
+    rc, _, _ = capture([str(PY_AS), "-c", "import faster_whisper"], timeout=90)
+    return rc == 0
+
+
+def _asr_lyrics(src, prefix=None, model="small"):
+    script = SCRIPT_SUB / "asr_lrc.py"
+    if not script.exists():
+        die(f"ASR 脚本缺失: {script}")
+    need_exe(PY_AS, "高级环境解释器")
+    stem = prefix or src.stem
+    DIR_SUB.mkdir(parents=True, exist_ok=True)
+    srt = DIR_SUB / f"{stem}_ASR歌词.srt"
+    lrc = DIR_SUB / f"{stem}_ASR歌词.lrc"
+    env = build_env()
+    env["HF_ENDPOINT"] = env.get("HF_ENDPOINT") or "https://hf-mirror.com"
+    hr(f"离线识别歌词（faster-whisper {model}）· {stem}")
+    note("提示：唱段识别只作草稿，需要人工修改后当字幕用")
+    rc, dt = run([str(PY_AS), str(script), str(src), "--srt", str(srt),
+                  "--lrc", str(lrc), "--model", model], env=env)
+    if rc == 0:
+        ok(f"完成，耗时 {dt:.0f}s -> {srt.relative_to(ROOT)}")
+    return rc
+
+
 def cmd_lyrics(args):
     src = need_file(args.file, "音频") if args.file else None
+    if getattr(args, "asr", False):
+        if not src:
+            die("--asr 需要指定音频文件")
+        return _asr_lyrics(src, args.prefix, args.asr_model)
     info = media_info(src) if src else {"duration": None, "tags": {}}
     tags = info.get("tags", {})
     junk = {"kuwo", "kugou", "qq", "netease", "unknown", "audio", "untitled",
@@ -524,11 +557,15 @@ def cmd_lyrics(args):
     if not recs and last_err is None:
         recs, last_err = _search({"q": title})
     if not recs:
+        if src and _has_asr():
+            warn("lrclib 没结果，改用离线识别（faster-whisper）")
+            return _asr_lyrics(src, args.prefix, args.asr_model)
         if last_err is not None:
             die(f"lrclib 不可达（{type(last_err).__name__}: {last_err}）\n"
                 f"      lrclib 偏发 503，稍后重试；或手动写 字幕\\{title}_歌词.srt")
         die(f"lrclib 查无此歌（关键词: {title} / {artist or '-'}）\n"
-            f"      可换关键词: music lyrics <file> --title \"...\" --artist \"...\"")
+            f"      可换关键词: music lyrics <file> --title \"...\" --artist \"...\"\n"
+            f"      或直接用离线识别: music lyrics <file> --asr")
 
     target = info.get("duration") or 0
     cands = [r for r in recs if r.get("syncedLyrics")]
@@ -706,6 +743,36 @@ def cmd_analyze(args):
     return rc
 
 
+# ---------------------------------------------------------------- report
+def cmd_report(args):
+    src = need_file(args.file, "音频")
+    script = SCRIPT_ANA / "pitch_report.py"
+    if not script.exists():
+        die(f"脚本缺失: {script}")
+    need_exe(PY_AS, "高级环境解释器")
+
+    wav = src
+    if src.suffix.lower() not in {".wav", ".flac"}:
+        DIR_TMP.mkdir(parents=True, exist_ok=True)
+        wav = DIR_TMP / (src.stem + "_pitch.wav")
+        note(f"转码为 wav…")
+        run([FFMPEG, "-y", "-i", str(src), "-ac", "1", "-ar", "44100",
+             "-loglevel", "error", str(wav)], quiet=True)
+        if not wav.exists():
+            die("转码失败")
+
+    label = args.label or src.stem
+    png = Path(args.png) if args.png else ROOT / "档案" / "报告" / f"{label}_音准.png"
+    jout = Path(args.json) if args.json else ROOT / "档案" / "报告" / f"{label}_音准.json"
+    png.parent.mkdir(parents=True, exist_ok=True)
+    hr(f"音准可视化报告 · {label}")
+    cmd = [str(PY_AS), str(script), str(wav), "--label", label,
+           "--png", str(png), "--json", str(jout)]
+    rc, dt = run(cmd)
+    if rc == 0:
+        ok(f"完成，耗时 {dt:.0f}s -> {png.relative_to(ROOT)}")
+    return rc
+
 # ---------------------------------------------------------------- freeze
 WHEEL_RE = re.compile(r"^(.+?)-(\d[^-]*)-(?:cp|py)\d", re.I)
 
@@ -788,6 +855,399 @@ def cmd_info(args):
     return 0
 
 
+# ---------------------------------------------------------------- pack
+AUDIO_EXTS = {".wav", ".flac", ".mp3", ".m4a"}
+
+
+def _flac_one(src, dst, level=8):
+    if dst.exists():
+        dst.unlink()
+    rc, out, err = capture([str(FFMPEG), "-y", "-i", str(src), "-map_metadata", "0",
+                            "-c:a", "flac", "-compression_level", str(level),
+                            "-loglevel", "error", str(dst)], timeout=3600)
+    if rc != 0 or not dst.exists() or dst.stat().st_size == 0:
+        if dst.exists():
+            dst.unlink()
+        return False, (err or out).strip()[-300:]
+    return True, ""
+
+
+def cmd_pack(args):
+    roots = [Path(d).resolve() for d in (args.dirs or [DIR_STEMS])]
+    for r in roots:
+        if not r.exists():
+            die(f"目录不存在: {r}")
+    files = []
+    for r in roots:
+        files += [f for f in r.rglob("*.wav") if f.stat().st_size >= args.min_mb * 1024 * 1024]
+    files.sort(key=lambda f: -f.stat().st_size)
+    hr(f"wav -> flac · {'执行' if args.apply else '预览（--apply 才真转）'}")
+    if not files:
+        warn(f"没有大于 {args.min_mb}MB 的 wav")
+        return 0
+    total = sum(f.stat().st_size for f in files)
+    print(f"待处理 {len(files)} 个文件，合计 {human(total)}（预估可省约 {human(total * 0.52)}）")
+    print()
+    done, freed, failed = 0, 0, 0
+    for i, src in enumerate(files, 1):
+        dst = src.with_suffix(".flac")
+        tag = pad(f"[{i}/{len(files)}]", 9)
+        if not args.apply:
+            print(f"{tag}{pad(str(src), 74)}{human(src.stat().st_size)}")
+            continue
+        okc, msg = _flac_one(src, dst, args.level)
+        if not okc:
+            failed += 1
+            fail(f"{tag}{src.name}  转换失败 {msg}")
+            continue
+        before = src.stat().st_size
+        after = dst.stat().st_size
+        st = src.stat()
+        os.utime(str(dst), (st.st_atime, st.st_mtime))
+        if not args.keep:
+            src.unlink()
+        done += 1
+        freed += before - after
+        print(f"{tag}{pad(src.name, 52)}{human(before):>9} -> {human(after):>9}  省 {100 * (1 - after / before):.0f}%")
+    print()
+    if not args.apply:
+        print("确认无误后执行：music pack --apply")
+        return 0
+    ok(f"转换 {done} 个，失败 {failed} 个，释放 {human(freed)}")
+    return 1 if failed else 0
+
+
+# ---------------------------------------------------------------- meta
+def _find_source(base):
+    best = None
+    for ext in (".flac", ".wav", ".mp3", ".m4a"):
+        for c in (ROOT / "素材").rglob(f"*{ext}"):
+            if base in c.stem:
+                if best is None or len(c.stem) < len(best.stem):
+                    best = c
+    return best
+
+
+def _project_meta(pdir, source):
+    stems = []
+    for f in sorted(pdir.rglob("*")):
+        if f.is_file() and f.suffix.lower() in AUDIO_EXTS:
+            stems.append({
+                "file": f.relative_to(pdir).as_posix(),
+                "format": f.suffix.lower().lstrip("."),
+                "bytes": f.stat().st_size,
+                "duration": round(media_info(f).get("duration") or 0, 2),
+            })
+    base = pdir.name.split("_")[0]
+    lyrics = sorted(p.name for p in DIR_SUB.glob(f"*{base}*")) if DIR_SUB.exists() else []
+    videos = sorted(p.name for p in DIR_OUT.glob(f"*{base}*")) if DIR_OUT.exists() else []
+    info = {
+        "project": pdir.name,
+        "source": str(source.relative_to(ROOT)) if source else None,
+        "source_duration": round(media_info(source).get("duration") or 0, 2) if source else None,
+        "stems": stems,
+        "total_bytes": sum(s["bytes"] for s in stems),
+        "lyrics": lyrics,
+        "videos": videos,
+        "updated": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    return info
+
+
+def cmd_meta(args):
+    if args.projects:
+        dirs = [DIR_STEMS / p if not Path(p).is_absolute() else Path(p) for p in args.projects]
+    else:
+        dirs = sorted(p for p in DIR_STEMS.iterdir() if p.is_dir()) if DIR_STEMS.exists() else []
+    hr(f"项目元数据 · {len(dirs)} 个项目")
+    index = []
+    for pdir in dirs:
+        if not pdir.exists():
+            warn(f"跳过不存在的项目: {pdir}")
+            continue
+        src = _find_source(pdir.name.split("_")[0])
+        info = _project_meta(pdir, src)
+        (pdir / "项目.json").write_text(json.dumps(info, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        index.append({k: info[k] for k in ("project", "source", "source_duration",
+                                          "total_bytes", "lyrics", "videos", "updated")})
+        index[-1]["stems"] = len(info["stems"])
+        print(f"  {pad(pdir.name, 34)}{len(info['stems']):>3} 个分轨  {human(info['total_bytes']):>9}"
+              f"  字幕 {len(info['lyrics'])}  视频 {len(info['videos'])}")
+    out = ROOT / "档案" / "项目索引.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps({"updated": time.strftime("%Y-%m-%d %H:%M:%S"),
+                               "projects": index}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print()
+    ok(f"索引 -> {out.relative_to(ROOT)}（{len(index)} 项）")
+    return 0
+
+
+# ---------------------------------------------------------------- sidr
+def cmd_sidr(args):
+    mix = need_file(args.mix, "混音")
+    voc = need_file(args.vocals, "人声")
+    acc = need_file(args.accomp, "伴奏")
+    hr("分离质量自评（SI-SDR）")
+    cmd = [str(PY_AS), str(TOOLS / "分析" / "sidr.py"), str(mix), str(voc), str(acc)]
+    if args.ref_vocals:
+        cmd += ["--ref-vocals", str(need_file(args.ref_vocals, "参考人声"))]
+    if args.ref_accomp:
+        cmd += ["--ref-accomp", str(need_file(args.ref_accomp, "参考伴奏"))]
+    if args.json:
+        cmd += ["--json", str(args.json)]
+    rc, dt = run(cmd)
+    if rc == 0:
+        ok(f"完成，耗时 {dt:.1f}s")
+    return rc
+
+
+# ---------------------------------------------------------------- chords
+def cmd_chords(args):
+    src = need_file(args.audio, "音频")
+    stem = src.stem
+    srt = Path(args.srt) if args.srt else DIR_SUB / f"{stem}_和弦.srt"
+    jout = Path(args.json) if args.json else ROOT / "档案" / "报告" / f"{stem}_chords.json"
+    srt.parent.mkdir(parents=True, exist_ok=True)
+    jout.parent.mkdir(parents=True, exist_ok=True)
+    hr(f"和弦识别 · {stem}")
+    cmd = [str(PY_AS), str(TOOLS / "分析" / "chords.py"), str(src),
+           "--srt", str(srt), "--json", str(jout), "--min-dur", str(args.min_dur)]
+    if args.bpm:
+        cmd += ["--bpm", str(args.bpm)]
+    if args.capo:
+        cmd += ["--capo", str(args.capo)]
+    if args.no_viterbi:
+        cmd += ["--no-viterbi"]
+    rc, dt = run(cmd)
+    if rc == 0:
+        ok(f"完成，耗时 {dt:.1f}s -> {srt.relative_to(ROOT)}")
+    return rc
+
+# ---------------------------------------------------------------- batch
+def _iter_audio(paths):
+    exts = {".wav", ".flac", ".mp3", ".m4a", ".aac", ".ogg"}
+    for p in paths:
+        p = Path(p)
+        if p.is_dir():
+            for f in sorted(p.rglob("*")):
+                if f.is_file() and f.suffix.lower() in exts:
+                    yield f
+        elif p.is_file():
+            yield p
+
+
+def cmd_batch(args):
+    files = list(_iter_audio(args.inputs))
+    if not files:
+        die("没找到音频文件")
+    hr(f"批量流水线 · {len(files)} 个文件")
+    me = [str(PY_MAIN), str(Path(__file__).resolve())]
+    done, failed = [], []
+    for i, f in enumerate(files, 1):
+        note(f"[{i}/{len(files)}] {f.name}")
+        out = Path(args.out) / f.stem if args.out else DIR_STEMS / f"{f.stem}_{args.parts}"
+        cmd = me + ["separate", str(f), "--parts", args.parts, "-o", str(out)]
+        if args.duration:
+            cmd += ["-d", str(args.duration)]
+        rc, _ = run(cmd, quiet=True)
+        if rc != 0:
+            failed.append(f.name)
+            warn(f"分离失败：{f.name}")
+            continue
+        if args.lyrics:
+            run(me + ["lyrics", str(f)], quiet=True)
+        if args.chords:
+            run(me + ["chords", str(f)], quiet=True)
+        done.append(f.name)
+    print()
+    ok(f"完成 {len(done)}/{len(files)}")
+    for n in failed:
+        print(f"  [XX] {n}")
+    return 0 if done else 1
+
+
+# ---------------------------------------------------------------- publish
+def cmd_publish(args):
+    src = need_file(args.file, "音频")
+    title = args.title or src.stem
+    dest = ROOT / "发布包" / title
+    dest.mkdir(parents=True, exist_ok=True)
+    hr(f"投稿包 · {title}")
+
+    media = need_file(args.video, "视频") if args.video else src
+    target = dest / media.name
+    if media.resolve() != target.resolve():
+        shutil.copy2(media, target)
+    note(f"媒体  {media.name}  {human(target.stat().st_size)}")
+
+    # 封面：16:9 1146x717
+    img_dir = ROOT / "素材" / "图片"
+    cover_src = Path(args.cover) if args.cover else None
+    if not cover_src:
+        # 1) 同名图片 2) 图片名是音频名的一部分（如 吉他手.webp ← 陈绮贞 - 吉他手.flac）
+        for ext in (".webp", ".jpg", ".jpeg", ".png"):
+            cand = img_dir / f"{src.stem}{ext}"
+            if cand.exists():
+                cover_src = cand
+                break
+        if not cover_src and img_dir.exists():
+            imgs = [p for p in img_dir.iterdir()
+                    if p.suffix.lower() in {".webp", ".jpg", ".jpeg", ".png"}
+                    and p.stem in src.stem and len(p.stem) >= 2]
+            if imgs:
+                cover_src = max(imgs, key=lambda p: len(p.stem))
+    cover_dst = dest / "封面.jpg"
+    if cover_src and cover_src.exists():
+        rc, _ = run([FFMPEG, "-y", "-i", str(cover_src),
+                     "-vf", "scale=1146:717:force_original_aspect_ratio=increase,crop=1146:717",
+                     "-q:v", "2", "-loglevel", "error", str(cover_dst)], quiet=True)
+        if cover_dst.exists():
+            note(f"封面  封面.jpg  {human(cover_dst.stat().st_size)}")
+    else:
+        warn("没找到封面（用 --cover 指定，或放到 素材\\图片\\<歌名>.webp）")
+
+    # 字幕：歌词 / 和弦
+    for srt in sorted(DIR_SUB.glob(f"*{src.stem}*.srt")):
+        shutil.copy2(srt, dest / srt.name)
+        note(f"字幕  {srt.name}")
+
+    tags = args.tags or "翻唱,吉他,弹唱,伴奏"
+    info = [
+        f"标题：{title}",
+        "",
+        "分区：音乐 → 翻唱 / 演奏",
+        f"标签：{tags}",
+        "",
+        "简介：",
+        f"{args.blurb or '自弹自唱 / 伴奏字幕版，欢迎提意见。'}",
+        "",
+        "分轨/字幕由本地 Spleeter + BS-Roformer 制作（仅用于学习与练习）。",
+    ]
+    chords = DIR_SUB / f"{src.stem}_和弦.srt"
+    if chords.exists():
+        info += ["", f"和弦时间轴见附件 {chords.name}（自动识别，仅供参考）。"]
+    (dest / "投稿信息.txt").write_text("\n".join(info), encoding="utf-8-sig")
+    note("文案  投稿信息.txt")
+
+    print()
+    ok(f"发布包已就绪 → {dest.relative_to(ROOT)}")
+    print("  上传时：标题/简介/标签直接复制 投稿信息.txt；封面用 封面.jpg；字幕可上传后挂字幕轨")
+    return 0
+
+
+# ---------------------------------------------------------------- log / trend
+TRAIN_LOG = ROOT / "档案" / "训练记录.jsonl"
+SPARK = "▁▂▃▄▅▆▇█"
+
+
+def _read_log():
+    if not TRAIN_LOG.exists():
+        return []
+    out = []
+    for ln in TRAIN_LOG.read_text(encoding="utf-8").splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            out.append(json.loads(ln))
+        except Exception:
+            continue
+    return out
+
+
+def cmd_log(args):
+    from datetime import date, datetime
+    src = need_file(args.file, "音频")
+    label = args.label or src.stem
+    jout = ROOT / "档案" / "报告" / f"{label}_音准.json"
+    hr(f"记录演唱训练 · {label}")
+    rc, _ = run([str(PY_MAIN), str(Path(__file__).resolve()), "report", str(src),
+                 "--label", label, "--json", str(jout)], quiet=True)
+    if rc != 0 or not jout.exists():
+        die("音准分析失败，先单独跑 music report 看报错")
+    try:
+        st = json.loads(jout.read_text(encoding="utf-8"))
+    except Exception as e:
+        die(f"报告解析失败：{e}")
+
+    rec = {
+        "date": date.today().isoformat(),
+        "time": datetime.now().strftime("%H:%M"),
+        "label": label,
+        "song": args.song or "",
+        "note": args.note or "",
+        "notes": st.get("notes"),
+        "median_abs_cents": st.get("median_abs_cents"),
+        "mean_abs_cents": st.get("mean_abs_cents"),
+        "pct_25": st.get("pct_25"),
+        "long_cents": (st.get("long_notes") or {}).get("median_cents"),
+        "short_cents": (st.get("short_notes") or {}).get("median_cents"),
+        "range": f"{st.get('range_low')}-{st.get('range_high')}",
+        "zones": st.get("zones"),
+    }
+    TRAIN_LOG.parent.mkdir(parents=True, exist_ok=True)
+    with open(TRAIN_LOG, "a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+    ok(f"已记录 → {TRAIN_LOG.relative_to(ROOT)}")
+    print(f"  音准中位 {rec['median_abs_cents']} 音分 · ±25内 {rec['pct_25']}% · "
+          f"长音 {rec['long_cents']} · 音域 {rec['range']}")
+    recs = _read_log()
+    if len(recs) >= 2:
+        prev = recs[-2]
+        if prev.get("median_abs_cents") is not None and rec["median_abs_cents"] is not None:
+            d = rec["median_abs_cents"] - prev["median_abs_cents"]
+            tag = "进步" if d < -1 else ("变差" if d > 1 else "持平")
+            print(f"  对比上次（{prev['date']} {prev['label']}）：{d:+.1f} 音分 → {tag}")
+    return 0
+
+
+def cmd_trend(args):
+    recs = _read_log()
+    if not recs:
+        die("还没有训练记录，先跑：music log <录音文件> --song 歌名")
+    if args.label:
+        recs = [r for r in recs if args.label in (r.get("label") or "")]
+    recs = recs[-args.last:]
+    if not recs:
+        die("没有匹配的记录")
+    hr(f"演唱训练趋势 · {len(recs)} 次")
+    print(f"  {'日期':<11}{'标签':<14}{'音准中位':>9}{'长音':>7}{'短音':>7}{'±25%':>7}  音域")
+    print("  " + "-" * 78)
+    for r in recs:
+        print(f"  {r['date']:<11}{(r['label'] or '')[:12]:<14}"
+              f"{r['median_abs_cents']:>9}{str(r['long_cents']):>7}{str(r['short_cents']):>7}"
+              f"{r['pct_25']:>7}  {r['range']}")
+
+    vals = [r["median_abs_cents"] for r in recs if r.get("median_abs_cents") is not None]
+    if vals:
+        lo, hi = min(vals), max(vals)
+        span = max(1e-6, hi - lo)
+        line = "".join(SPARK[min(7, int((hi - v) / span * 7.99))] for v in vals)
+        print(f"\n  走势（块越高=音分越小=越准）\n  {line}   {vals[0]} → {vals[-1]}")
+        first, last = vals[0], vals[-1]
+        print(f"  累计变化 {last - first:+.1f} 音分（{len(vals)} 次记录）")
+
+    md = ROOT / "档案" / "训练趋势.md"
+    lines = ["# 演唱训练趋势", "", "| 日期 | 标签 | 音准中位(音分) | 长音 | 短音 | ±25% | 音域 | 备注 |",
+             "|---|---|---|---|---|---|---|---|"]
+    for r in recs:
+        lines.append(f"| {r['date']} | {r['label']} | {r['median_abs_cents']} | {r['long_cents']} | "
+                     f"{r['short_cents']} | {r['pct_25']} | {r['range']} | {r.get('note') or ''} |")
+    md.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"\n  已导出 {md.relative_to(ROOT)}")
+    return 0
+
+
+# ---------------------------------------------------------------- gui
+def cmd_gui(args):
+    script = TOOLS / "gui.py"
+    if not script.exists():
+        die(f"GUI 脚本缺失: {script}")
+    hr("本地 Web GUI")
+    print(f"  打开 http://127.0.0.1:{args.port}")
+    rc, _ = run([str(PY_MAIN), str(script), "--port", str(args.port)])
+    return rc
 # ---------------------------------------------------------------- CLI
 def main(argv=None):
     ap = argparse.ArgumentParser(
@@ -834,6 +1294,9 @@ def main(argv=None):
     p.add_argument("--title", help="歌名")
     p.add_argument("--artist", help="歌手")
     p.add_argument("--prefix", help="输出文件名前缀")
+    p.add_argument("--asr", action="store_true", help="不查 lrclib，直接用 faster-whisper 识别")
+    p.add_argument("--asr-model", dest="asr_model", default="small",
+                   help="识别模型 tiny/base/small/medium（默认 small）")
     p.set_defaults(func=cmd_lyrics)
 
     p = sub.add_parser("ass", help="srt -> ass")
@@ -866,11 +1329,83 @@ def main(argv=None):
     p.add_argument("--label", help="报告标题")
     p.set_defaults(func=cmd_analyze)
 
+    p = sub.add_parser("report", help="音准可视化报告（PNG + json）")
+    p.add_argument("file", help="录音/分轨文件")
+    p.add_argument("--label", help="报告标题（默认文件名）")
+    p.add_argument("--png", help="输出 PNG 路径")
+    p.add_argument("--json", help="输出 json 路径")
+    p.set_defaults(func=cmd_report)
+
     p = sub.add_parser("freeze", help="重新生成两套 requirements.txt")
     p.set_defaults(func=cmd_freeze)
 
     p = sub.add_parser("info", help="显示路径配置")
     p.set_defaults(func=cmd_info)
+
+    p = sub.add_parser("pack", help="分轨 wav -> flac 压缩（省约一半体积）")
+    p.add_argument("dirs", nargs="*", help="要处理的目录（默认 分轨\\）")
+    p.add_argument("--apply", action="store_true", help="真正执行（默认只预览）")
+    p.add_argument("--keep", action="store_true", help="保留原 wav")
+    p.add_argument("--min-mb", dest="min_mb", type=float, default=2.0, help="只处理大于 N MB 的文件（默认 2）")
+    p.add_argument("--level", type=int, default=8, help="flac 压缩等级 0-12（默认 8）")
+    p.set_defaults(func=cmd_pack)
+
+    p = sub.add_parser("meta", help="生成项目元数据 项目.json + 全局索引")
+    p.add_argument("projects", nargs="*", help="项目目录名（默认 分轨\\ 下全部）")
+    p.set_defaults(func=cmd_meta)
+
+    p = sub.add_parser("sidr", help="分离质量自评（SI-SDR / 串音 / 电平）")
+    p.add_argument("mix", help="原始混音")
+    p.add_argument("vocals", help="分离出的人声")
+    p.add_argument("accomp", help="分离出的伴奏")
+    p.add_argument("--ref-vocals", dest="ref_vocals", help="参考人声（可选，算真 SI-SDR）")
+    p.add_argument("--ref-accomp", dest="ref_accomp", help="参考伴奏（可选）")
+    p.add_argument("--json", help="结果写入 json")
+    p.set_defaults(func=cmd_sidr)
+
+    p = sub.add_parser("chords", help="和弦识别（Viterbi 平滑 + 转位）-> SRT")
+    p.add_argument("audio")
+    p.add_argument("--srt", help="输出 SRT（默认 字幕\\<歌名>_和弦.srt）")
+    p.add_argument("--json", help="输出 json（默认 档案\\报告\\<歌名>_chords.json）")
+    p.add_argument("--bpm", type=float, help="固定 BPM（节拍跟踪不稳时用）")
+    p.add_argument("--capo", type=int, default=0, help="变调夹品位（显示手位和弦）")
+    p.add_argument("--no-viterbi", dest="no_viterbi", action="store_true", help="不做平滑")
+    p.add_argument("--min-dur", dest="min_dur", type=float, default=0.35, help="最短和弦时长")
+    p.set_defaults(func=cmd_chords)
+
+    p = sub.add_parser("batch", help="批量：目录内全部音频连续分离（可选歌词/和弦）")
+    p.add_argument("inputs", nargs="+", help="音频文件或目录")
+    p.add_argument("--parts", default="2stems", choices=["2stems", "4stems", "5stems"])
+    p.add_argument("-d", "--duration", type=float, help="只处理前 N 秒")
+    p.add_argument("--lyrics", action="store_true", help="顺带抓歌词")
+    p.add_argument("--chords", action="store_true", help="顺带识别和弦")
+    p.add_argument("--out", help="输出根目录（默认 分轨\\<歌名>_<模型>）")
+    p.set_defaults(func=cmd_batch)
+
+    p = sub.add_parser("publish", help="生成 B站投稿包（媒体+封面+字幕+文案）")
+    p.add_argument("file", help="音频（用于命名/找封面字幕）")
+    p.add_argument("--video", help="成品视频（缺省用音频本身）")
+    p.add_argument("--cover", help="自定义封面图")
+    p.add_argument("--title", help="视频标题（默认文件名）")
+    p.add_argument("--tags", help="标签，逗号分隔")
+    p.add_argument("--blurb", help="简介正文")
+    p.set_defaults(func=cmd_publish)
+
+    p = sub.add_parser("log", help="记录一次练习（音准指标入档）")
+    p.add_argument("file")
+    p.add_argument("--label", help="标签（默认文件名）")
+    p.add_argument("--song", help="歌曲名")
+    p.add_argument("--note", help="备注")
+    p.set_defaults(func=cmd_log)
+
+    p = sub.add_parser("trend", help="训练趋势（表格 + 走势图 + Markdown）")
+    p.add_argument("--label", help="只看标签包含该词的记录")
+    p.add_argument("--last", type=int, default=20, help="最近 N 条（默认 20）")
+    p.set_defaults(func=cmd_trend)
+
+    p = sub.add_parser("gui", help="本地 Web GUI（浏览器里点按钮）")
+    p.add_argument("--port", type=int, default=8765)
+    p.set_defaults(func=cmd_gui)
 
     args = ap.parse_args(argv)
     if not getattr(args, "cmd", None):
